@@ -12,7 +12,7 @@ This script automates the installation process for CUDA, cuDNN, and OpenCV on an
 1. Clone this repository to your local machine:
 
    ```bash
-   git clone https://github.com/mhkarazeybek/cuda-cudnn-opencv-installation.git
+   git clone https://github.com/mhkarazeybek/install_cuda_cudnn_opencv.git
 2. Navigate to the project directory:
    ```bash
    cd cuda-cudnn-opencv-installation
