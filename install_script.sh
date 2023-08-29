@@ -73,13 +73,13 @@ trap 'handle_error' ERR
 
 # Uninstall existing CUDA and NVIDIA drivers
 sudo apt-get --purge remove "*cublas*" "*cufft*" "*curand*" \
-"*cusolver*" "*cusparse*" "*npp*" "*nvjpeg*" "cuda*" "nsight*" "*nvidia*"
+"*cusolver*" "*cusparse*" "*npp*" "nvidia-*" "cuda-*" "nsight-*"
 sudo apt-get autoremove
 sudo apt-get autoclean
 sudo rm -rf /usr/local/cuda*
 
 # Install NVIDIA drivers
-sudo ubuntu-drivers autoinstall
+sudo ubuntu-drivers autoinstall || true  # Continue if driver installation fails
 
 # Check installed cmake version
 if [ "${INSTALL_CMAKE}" -eq 1 ]; then
@@ -91,7 +91,7 @@ if [ "${INSTALL_CMAKE}" -eq 1 ]; then
         echo "Removing old CMake version: ${INSTALLED_CMAKE_VERSION}"
         sudo apt-get remove cmake
         echo "Installing CMake version: ${CMAKE_VERSION}"
-        sudo apt-get install -y cmake=${CMAKE_VERSION}-*
+        sudo apt-get install -y cmake=${CMAKE_VERSION}-* || true  # Continue if cmake installation fails
     else
         echo "CMake version is up to date: ${INSTALLED_CMAKE_VERSION}"
     fi
@@ -105,7 +105,7 @@ if [ "${INSTALL_CUDA}" -eq 1 ]; then
     sudo dpkg -i cuda-repo-ubuntu${UBUNTU_VERSION}-${CUDA_VERSION}-local_${CUDA_VERSION}-470.57.02-1_amd64.deb
     sudo apt-key add /var/cuda-repo-ubuntu${UBUNTU_VERSION}-${CUDA_VERSION}-local/7fa2af80.pub
     sudo apt-get update
-    sudo apt-get -y install cuda
+    sudo apt-get -y install cuda || true  # Continue if CUDA installation fails
 fi
 
 # Install cuDNN
