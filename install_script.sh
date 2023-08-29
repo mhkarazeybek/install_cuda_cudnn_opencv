@@ -73,7 +73,7 @@ trap 'handle_error' ERR
 
 # Uninstall existing CUDA and NVIDIA drivers
 sudo apt-get --purge remove "*cublas*" "*cufft*" "*curand*" \
-"*cusolver*" "*cusparse*" "*npp*" "nvidia-*" "cuda-*" "nsight-*"
+"*cusolver*" "*cusparse*" "*npp*" "nvidia-*" "cuda-*" "nsight-*" || true  # Continue if removal fails
 sudo apt-get autoremove
 sudo apt-get autoclean
 sudo rm -rf /usr/local/cuda*
@@ -89,9 +89,9 @@ if [ "${INSTALL_CMAKE}" -eq 1 ]; then
     # Compare installed cmake version with required cmake version
     if [[ $(echo "${INSTALLED_CMAKE_VERSION} < ${CMAKE_VERSION}" | bc -l) -eq 1 ]]; then
         echo "Removing old CMake version: ${INSTALLED_CMAKE_VERSION}"
-        sudo apt-get remove cmake
+        sudo apt-get remove cmake || true  # Continue if removal fails
         echo "Installing CMake version: ${CMAKE_VERSION}"
-        sudo apt-get install -y cmake=${CMAKE_VERSION}-* || true  # Continue if cmake installation fails
+        sudo apt-get install -y cmake=${CMAKE_VERSION}-* || true  # Continue if installation fails
     else
         echo "CMake version is up to date: ${INSTALLED_CMAKE_VERSION}"
     fi
@@ -99,9 +99,13 @@ fi
 
 # Install CUDA
 if [ "${INSTALL_CUDA}" -eq 1 ]; then
-    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_VERSION}/x86_64/cuda-ubuntu${UBUNTU_VERSION}.pin
+    CUDA_REPO_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_VERSION}/x86_64"
+    CUDA_PIN_URL="${CUDA_REPO_URL}/cuda-ubuntu${UBUNTU_VERSION}.pin"
+    CUDA_DEB_URL="https://developer.download.nvidia.com/compute/cuda/${CUDA_VERSION}/local_installers/cuda-repo-ubuntu${UBUNTU_VERSION}-${CUDA_VERSION}-local_${CUDA_VERSION}-470.57.02-1_amd64.deb"
+
+    wget ${CUDA_PIN_URL}
     sudo mv cuda-ubuntu${UBUNTU_VERSION}.pin /etc/apt/preferences.d/cuda-repository-pin-600
-    wget https://developer.download.nvidia.com/compute/cuda/${CUDA_VERSION}/local_installers/cuda-repo-ubuntu${UBUNTU_VERSION}-${CUDA_VERSION}-local_${CUDA_VERSION}-470.57.02-1_amd64.deb
+    wget ${CUDA_DEB_URL}
     sudo dpkg -i cuda-repo-ubuntu${UBUNTU_VERSION}-${CUDA_VERSION}-local_${CUDA_VERSION}-470.57.02-1_amd64.deb
     sudo apt-key add /var/cuda-repo-ubuntu${UBUNTU_VERSION}-${CUDA_VERSION}-local/7fa2af80.pub
     sudo apt-get update
@@ -110,7 +114,9 @@ fi
 
 # Install cuDNN
 if [ "${INSTALL_CUDNN}" -eq 1 ]; then
-    wget https://developer.download.nvidia.com/compute/redist/cudnn/v${CUDNN_VERSION}/cudnn-${CUDNN_VERSION}-linux-x64-v${CUDNN_VERSION}.tgz
+    CUDNN_URL="https://developer.download.nvidia.com/compute/redist/cudnn/v${CUDNN_VERSION}/cudnn-${CUDNN_VERSION}-linux-x64-v${CUDNN_VERSION}.tgz"
+
+    wget ${CUDNN_URL}
     tar -xzvf cudnn-${CUDNN_VERSION}-linux-x64-v${CUDNN_VERSION}.tgz
     sudo cp cuda/include/cudnn*.h /usr/local/cuda/include
     sudo cp cuda/lib64/libcudnn* /usr/local/cuda/lib64
