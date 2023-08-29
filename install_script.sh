@@ -62,6 +62,15 @@ if [ -z "${UBUNTU_VERSION}" ]; then
     usage
 fi
 
+# Function to handle errors
+handle_error() {
+    echo "An error occurred. Exiting..."
+    exit 1
+}
+
+# Trap errors and execute error handling function
+trap 'handle_error' ERR
+
 # Uninstall existing CUDA and NVIDIA drivers
 sudo apt-get --purge remove "*cublas*" "*cufft*" "*curand*" \
 "*cusolver*" "*cusparse*" "*npp*" "*nvjpeg*" "cuda*" "nsight*" "*nvidia*"
@@ -172,3 +181,5 @@ if [ "${INSTALL_OPENCV}" -eq 1 ]; then
     # Verify OpenCV installation
     python3 -c "import cv2; print(cv2.getBuildInformation())"
 fi
+
+echo "Installation completed successfully."
