@@ -1,70 +1,20 @@
 #!/bin/bash
 
-# Exit on any error
-set -e
+# Colors for terminal output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'  # No Color
 
-# Usage function
-usage() {
-    echo "Usage: $0 --cmake <CMAKE_VERSION> --cuda <CUDA_VERSION> --cudnn <CUDNN_VERSION> --opencv <OPENCV_VERSION> --ubuntu <UBUNTU_VERSION>"
-    exit 1
+# Print colored text
+print_color() {
+    COLOR=$1
+    TEXT=$2
+    echo -e "${COLOR}${TEXT}${NC}"
 }
-
-# Display usage if no arguments are provided
-if [ $# -eq 0 ]; then
-    usage
-fi
-
-# Initialize flags for optional installations
-INSTALL_CMAKE=0
-INSTALL_CUDA=0
-INSTALL_CUDNN=0
-INSTALL_OPENCV=0
-
-# Parse command line arguments
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --cmake)
-            CMAKE_VERSION=$2
-            INSTALL_CMAKE=1
-            shift 2
-            ;;
-        --cuda)
-            CUDA_VERSION=$2
-            INSTALL_CUDA=1
-            shift 2
-            ;;
-        --cudnn)
-            CUDNN_VERSION=$2
-            INSTALL_CUDNN=1
-            shift 2
-            ;;
-        --opencv)
-            OPENCV_VERSION=$2
-            INSTALL_OPENCV=1
-            shift 2
-            ;;
-        --ubuntu)
-            UBUNTU_VERSION=$2
-            shift 2
-            ;;
-        --help)
-            usage
-            ;;
-        *)
-            echo "Invalid option: $1"
-            usage
-            ;;
-    esac
-done
-
-# Check for required parameters
-if [ -z "${UBUNTU_VERSION}" ]; then
-    usage
-fi
 
 # Function to handle errors
 handle_error() {
-    echo "An error occurred. Exiting..."
+    print_color "${RED}" "An error occurred. Exiting..."
     exit 1
 }
 
@@ -72,50 +22,57 @@ handle_error() {
 trap 'handle_error' ERR
 
 # Uninstall existing CUDA and NVIDIA drivers
+print_color "${GREEN}" "Uninstalling existing CUDA and NVIDIA drivers..."
 sudo apt-get --purge remove "*cublas*" "*cufft*" "*curand*" \
-"*cusolver*" "*cusparse*" "*npp*" "nvidia-*" "cuda-*" "nsight-*" || true  # Continue if removal fails
+"*cusolver*" "*cusparse*" "*npp*" "nvidia-*" "cuda-*" "nsight-*" || true
 sudo apt-get autoremove
 sudo apt-get autoclean
 sudo rm -rf /usr/local/cuda*
 
+# Install required packages
+required_packages="cmake pkg-config unzip yasm git checkinstall \
+libjpeg-dev libpng-dev libtiff-dev libavcodec-dev libavformat-dev \
+libswscale-dev libavresample-dev libgstreamer1.0-dev \
+libgstreamer-plugins-base1.0-dev libxvidcore-dev x264 libx264-dev \
+libfaac-dev libmp3lame-dev libtheora-dev libvorbis-dev \
+libopencore-amrnb-dev libopencore-amrwb-dev \
+libdc1394-22 libdc1394-22-dev libxine2-dev libv4l-dev v4l-utils \
+libgtk-3-dev libtbb-dev libatlas-base-dev gfortran"
+
+print_color "${GREEN}" "Installing required packages..."
+sudo apt-get update
+sudo apt-get install -y ${required_packages} || true
+
+# Determine the latest NVIDIA driver version
+NVIDIA_DRIVER_VERSION=$(sudo ubuntu-drivers list | grep nvidia-driver | awk '{print $3}')
+NVIDIA_VERSION_FULL=$(apt-cache show nvidia-driver-${NVIDIA_DRIVER_VERSION} | grep Version | awk '{print $2}')
+NVIDIA_VERSION=${NVIDIA_VERSION_FULL%-*}  # Remove the package suffix
+
 # Install NVIDIA drivers
-sudo ubuntu-drivers autoinstall || true  # Continue if driver installation fails
+print_color "${GREEN}" "Installing NVIDIA drivers..."
+sudo apt-get install -y nvidia-driver-${NVIDIA_DRIVER_VERSION} || true
 
-# Check installed cmake version
-if [ "${INSTALL_CMAKE}" -eq 1 ]; then
-    INSTALLED_CMAKE_VERSION=$(cmake --version | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -n 1)
-    echo "Installed CMake version: ${INSTALLED_CMAKE_VERSION}"
-
-    # Compare installed cmake version with required cmake version
-    if [[ $(echo "${INSTALLED_CMAKE_VERSION} < ${CMAKE_VERSION}" | bc -l) -eq 1 ]]; then
-        echo "Removing old CMake version: ${INSTALLED_CMAKE_VERSION}"
-        sudo apt-get remove cmake || true  # Continue if removal fails
-        echo "Installing CMake version: ${CMAKE_VERSION}"
-        sudo apt-get install -y cmake=${CMAKE_VERSION}-* || true  # Continue if installation fails
-    else
-        echo "CMake version is up to date: ${INSTALLED_CMAKE_VERSION}"
-    fi
-fi
-
-# Install CUDA
-if [ "${INSTALL_CUDA}" -eq 1 ]; then
-    CUDA_REPO_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_VERSION}/x86_64"
-    CUDA_PIN_URL="${CUDA_REPO_URL}/cuda-ubuntu${UBUNTU_VERSION}.pin"
-    CUDA_DEB_URL="https://developer.download.nvidia.com/compute/cuda/${CUDA_VERSION}/local_installers/cuda-repo-ubuntu${UBUNTU_VERSION}-${CUDA_VERSION}-local_${CUDA_VERSION}-470.57.02-1_amd64.deb"
-
+# Install CUDA (if needed)
+if [ -n "${CUDA_VERSION}" ]; then
+    # Download and install CUDA
+    print_color "${GREEN}" "Installing CUDA..."
+    CUDA_REPO_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64"
+    CUDA_PIN_URL="${CUDA_REPO_URL}/cuda-ubuntu1804.pin"
+    CUDA_DEB_URL="https://developer.download.nvidia.com/compute/cuda/${CUDA_VERSION}/local_installers/cuda-repo-ubuntu1804-${CUDA_VERSION}-local_${CUDA_VERSION}-${NVIDIA_VERSION}-1_amd64.deb"
     wget ${CUDA_PIN_URL}
-    sudo mv cuda-ubuntu${UBUNTU_VERSION}.pin /etc/apt/preferences.d/cuda-repository-pin-600
+    sudo mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
     wget ${CUDA_DEB_URL}
-    sudo dpkg -i cuda-repo-ubuntu${UBUNTU_VERSION}-${CUDA_VERSION}-local_${CUDA_VERSION}-470.57.02-1_amd64.deb
-    sudo apt-key add /var/cuda-repo-ubuntu${UBUNTU_VERSION}-${CUDA_VERSION}-local/7fa2af80.pub
+    sudo dpkg -i cuda-repo-ubuntu1804-${CUDA_VERSION}-local_${CUDA_VERSION}-${NVIDIA_VERSION}-1_amd64.deb
+    sudo apt-key add /var/cuda-repo-ubuntu1804-${CUDA_VERSION}-local/7fa2af80.pub
     sudo apt-get update
-    sudo apt-get -y install cuda || true  # Continue if CUDA installation fails
+    sudo apt-get -y install cuda || true
 fi
 
-# Install cuDNN
-if [ "${INSTALL_CUDNN}" -eq 1 ]; then
+# Install cuDNN (if needed)
+if [ -n "${CUDNN_VERSION}" ]; then
+    # Download and install cuDNN
+    print_color "${GREEN}" "Installing cuDNN..."
     CUDNN_URL="https://developer.download.nvidia.com/compute/redist/cudnn/v${CUDNN_VERSION}/cudnn-${CUDNN_VERSION}-linux-x64-v${CUDNN_VERSION}.tgz"
-
     wget ${CUDNN_URL}
     tar -xzvf cudnn-${CUDNN_VERSION}-linux-x64-v${CUDNN_VERSION}.tgz
     sudo cp cuda/include/cudnn*.h /usr/local/cuda/include
@@ -126,32 +83,22 @@ if [ "${INSTALL_CUDNN}" -eq 1 ]; then
     sudo chmod a+r /usr/lib/x86_64-linux-gnu/libcudnn*
 fi
 
-# Download and compile OpenCV
-if [ "${INSTALL_OPENCV}" -eq 1 ]; then
-    sudo apt-get update
-    sudo apt-get upgrade
-    sudo apt-get install -y cmake pkg-config unzip yasm git checkinstall \
-    libjpeg-dev libpng-dev libtiff-dev libavcodec-dev libavformat-dev \
-    libswscale-dev libavresample-dev libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev libxvidcore-dev x264 libx264-dev \
-    libfaac-dev libmp3lame-dev libtheora-dev libvorbis-dev \
-    libopencore-amrnb-dev libopencore-amrwb-dev \
-    libdc1394-22 libdc1394-22-dev libxine2-dev libv4l-dev v4l-utils \
-    libgtk-3-dev libtbb-dev libatlas-base-dev gfortran
-
+# Download and compile OpenCV (if needed)
+if [ -n "${OPENCV_VERSION}" ]; then
+    # Download and compile OpenCV
+    print_color "${GREEN}" "Compiling OpenCV..."
     cd ~/Downloads
     wget -O opencv.zip https://github.com/opencv/opencv/archive/refs/tags/${OPENCV_VERSION}.zip
     unzip opencv.zip
     cd opencv-${OPENCV_VERSION}
     mkdir build
     cd build
-
-    # Configure OpenCV build
     cmake_cmd="cmake -D CMAKE_BUILD_TYPE=RELEASE \
     -D CMAKE_INSTALL_PREFIX=/usr/local/bin \
     -D WITH_TBB=ON \
     -D ENABLE_FAST_MATH=1 \
     -D CUDA_FAST_MATH=1 \
+    -D WITH_TBB=ON \
     -D WITH_CUBLAS=1 \
     -D WITH_CUDA=ON \
     -D BUILD_opencv_cudacodec=OFF \
@@ -166,26 +113,15 @@ if [ "${INSTALL_OPENCV}" -eq 1 ]; then
     -D OPENCV_ENABLE_NONFREE=ON \
     -D OPENCV_PYTHON3_INSTALL_PATH=/usr/local/lib/python3.6/dist-packages \
     -D PYTHON_EXECUTABLE=/usr/bin/python3 \
+    -D OPENCV_EXTRA_MODULES_PATH=/home/ubuntu/opencv_env/opencv_contrib-${OPENCV_VERSION}/modules \
     -D INSTALL_PYTHON_EXAMPLES=OFF \
     -D INSTALL_C_EXAMPLES=OFF \
     -D BUILD_EXAMPLES=OFF .."
-
     eval ${cmake_cmd}
-
-    # Compile and install OpenCV
-    nproc=$(nproc)  # Get number of CPU cores
-    make_cmd="make -j${nproc}"
-    sudo_cmd="sudo make install"
-
+    nproc_num=$(nproc)
+    make_cmd="make -j${nproc_num}"
     eval ${make_cmd}
-    eval ${sudo_cmd}
-
-    # Configure library paths for OpenCV
-    sudo /bin/bash -c 'echo "/usr/local/lib" >> /etc/ld.so.conf.d/opencv.conf'
-    sudo ldconfig
-
-    # Verify OpenCV installation
-    python3 -c "import cv2; print(cv2.getBuildInformation())"
+    sudo make install
 fi
 
-echo "Installation completed successfully."
+print_color "${GREEN}" "Installation completed successfully."
